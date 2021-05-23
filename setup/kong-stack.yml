@@ -1,0 +1,84 @@
+version: "3.8"
+services:
+    auth:
+        image: v2_auth:latest
+        depends_on:
+        - db
+        ports:
+         - 9000:9000
+        networks:
+         - studentpub-network-api
+         - studentpub-network-internal
+        deploy:
+            replicas: 2
+            placement:
+                max_replicas_per_node: 1
+            update_config:
+                order: start-first
+            rollback_config:
+                order: start-first
+
+    db:
+        image: mysql:5.7
+        environment:
+        - MYSQL_ROOT_PASSWORD=P@rolaAiaCr1ng3!
+        - MYSQL_USER=admin
+        - MYSQL_PASSWORD=parola
+        - MYSQL_DATABASE=studentpubusers
+        - VERSION=1.0
+        volumes:
+        - studentpub-db-volume:/var/lib/mysql:rw
+        - ./student-management-db/initdb.sql:/docker-entrypoint-initdb.d/init.sql
+        networks:
+        - studentpub-network-api
+        - studentpub-network-utility
+        healthcheck:
+            test: ["CMD", "mysql", "-h", "localhost", "-P", "3306", "-u", "admin", "--password=parola", "-e", "select 1", "studentpubusers"]
+            interval: 10s
+            timeout: 45s
+            retries: 10
+        deploy:
+            placement:
+                constraints: [node.role == manager]
+
+    adminer:
+        depends_on:
+        - db
+        image: adminer
+        ports:
+        - 8080:8080
+        networks:
+        - studentpub-network-utility
+        - studentpub-network-internal
+
+    kong:
+        image: kong:latest
+        volumes:
+            - ./student-management-config/kong:/usr/local/kong/declarative
+        environment:
+            KONG_DATABASE: 'off'
+            KONG_DECLARATIVE_CONFIG: /usr/local/kong/declarative/kong.yml
+            KONG_PROXY_ACCESS_LOG: /dev/stdout
+            KONG_ADMIN_ACCESS_LOG: /dev/stdout
+            KONG_PROXY_ERROR_LOG: /dev/stderr
+            KONG_ADMIN_ERROR_LOG: /dev/stderr
+            KONG_ADMIN_LISTEN: 0.0.0.0:8001, 0.0.0.0:8444 ssl
+        ports:
+            - 8000:8000
+            - 8443:8443
+        deploy:
+            placement:
+                constraints: [node.role == manager]
+        networks:
+            - studentpub-network-internal
+
+volumes:
+    studentpub-db-volume:
+
+networks:
+    studentpub-network-api:
+        name: studentpub-network-api
+    studentpub-network-utility:
+        name: studentpub-network-utility
+    studentpub-network-internal:
+        name: studentpub-network-internal
